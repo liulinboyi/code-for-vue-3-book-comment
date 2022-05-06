@@ -6,14 +6,17 @@
 const bucket = new WeakMap()
 const ITERATE_KEY = Symbol()
 
+/* 变成响应式后 值的映射 做缓存 */
 const reactiveMap = new Map()
 
 function reactive(obj) {
   const proxy = createReactive(obj)
 
+  // 避免重复响应式
   const existionProxy = reactiveMap.get(obj)
   if (existionProxy) return existionProxy
 
+  // 做映射 存起来
   reactiveMap.set(obj, proxy)
 
   return proxy
@@ -30,10 +33,14 @@ function shallowReadonly(obj) {
   return createReactive(obj, true, true)
 }
 
+// 被修改的数组方法
 const arrayInstrumentations = {}
 
+// 对数组常用方法做处理
 ;['includes', 'indexOf', 'lastIndexOf'].forEach(method => {
+  // 原始方法
   const originMethod = Array.prototype[method]
+  // 被修改的数组方法
   arrayInstrumentations[method] = function(...args) {
     // this 是代理对象，先在代理对象中查找，将结果存储到 res 中
     let res = originMethod.apply(this, args)
@@ -56,12 +63,14 @@ function createReactive(obj, isShallow = false, isReadonly = false) {
         return target
       }
 
+      // 如果是 数组 && 使用了这些方法（'includes', 'indexOf', 'lastIndexOf'） 进行特殊处理
       if (Array.isArray(target) && arrayInstrumentations.hasOwnProperty(key)) {
+        // 去arrayInstrumentations调用被修改的方法
         return Reflect.get(arrayInstrumentations, key, receiver)
       }
 
       // 非只读的时候才需要建立响应联系
-      if (!isReadonly && typeof key !== 'symbol') {
+      if (!isReadonly && typeof key !== 'symbol' /* key不等于symbol */) {
         track(target, key)
       }
 

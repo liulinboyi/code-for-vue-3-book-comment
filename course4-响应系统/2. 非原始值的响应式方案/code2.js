@@ -1,20 +1,102 @@
-<body></body>
-<script>
 
 
 // 存储副作用函数的桶
 const bucket = new WeakMap()
 
-// 原始数据
-const data = { foo: 1 }
+function track(target, key) {
+  if (!activeEffect) return
+  let depsMap = bucket.get(target)
+  if (!depsMap) {
+    bucket.set(target, (depsMap = new Map()))
+  }
+  let deps = depsMap.get(key)
+  if (!deps) {
+    depsMap.set(key, (deps = new Set()))
+  }
+  deps.add(activeEffect)
+  activeEffect.deps.push(deps)
+}
+
+function trigger(target, key) {
+  const depsMap = bucket.get(target)
+  if (!depsMap) return
+  const effects = depsMap.get(key)
+
+  const effectsToRun = new Set()
+  effects && effects.forEach(effectFn => {
+    if (effectFn !== activeEffect) {
+      effectsToRun.add(effectFn)
+    }
+  })
+  effectsToRun.forEach(effectFn => {
+    if (effectFn.options.scheduler) {
+      effectFn.options.scheduler(effectFn)
+    } else {
+      effectFn()
+    }
+  })
+  // effects && effects.forEach(effectFn => effectFn())
+}
+
+// 用一个全局变量存储当前激活的 effect 函数
+let activeEffect
+// effect 栈
+const effectStack = []
+
+function effect(fn, options = {}) {
+  const effectFn = () => {
+    cleanup(effectFn)
+    // 当调用 effect 注册副作用函数时，将副作用函数复制给 activeEffect
+    activeEffect = effectFn
+    // 在调用副作用函数之前将当前副作用函数压栈
+    effectStack.push(effectFn)
+    const res = fn()
+    // 在当前副作用函数执行完毕后，将当前副作用函数弹出栈，并还原 activeEffect 为之前的值
+    effectStack.pop()
+    activeEffect = effectStack[effectStack.length - 1]
+
+    return res
+  }
+  // 将 options 挂在到 effectFn 上
+  effectFn.options = options
+  // activeEffect.deps 用来存储所有与该副作用函数相关的依赖集合
+  effectFn.deps = []
+  // 执行副作用函数
+  if (!options.lazy) {
+    effectFn()
+  }
+
+  return effectFn
+}
+
+function cleanup(effectFn) {
+  for (let i = 0; i < effectFn.deps.length; i++) {
+    const deps = effectFn.deps[i]
+    deps.delete(effectFn)
+  }
+  effectFn.deps.length = 0
+}
+
+
+
+
+// =========================
+
+const obj = {
+  foo: 1,
+  get bar() {
+    return this.foo
+  }
+}
+
 // 对原始数据的代理
-const obj = new Proxy(data, {
+const p = new Proxy(obj, {
   // 拦截读取操作
-  get(target, key) {
+  get(target, key, receiver) {
     // 将副作用函数 activeEffect 添加到存储副作用函数的桶中
     track(target, key)
     // 返回属性值
-    return target[key]
+    return Reflect.get(target, key, receiver)
   },
   // 拦截设置操作
   set(target, key, newVal) {
@@ -25,85 +107,11 @@ const obj = new Proxy(data, {
   }
 })
 
-/* 将副作用函数 activeEffect 添加到存储副作用函数的桶中 */
-function track(target, key) {
-  let depsMap = bucket.get(target)
-  if (!depsMap) {
-    bucket.set(target, (depsMap = new Map()))
-  }
-  let deps = depsMap.get(key)
-  if (!deps) {
-    depsMap.set(key, (deps = new Set()))
-  }
-  if (activeEffect) {
-    deps.add(activeEffect)
-    activeEffect.deps.push(deps)
-  }
-}
-
-/* 把副作用函数从桶里取出并执行 */
-function trigger(target, key) {
-  const depsMap = bucket.get(target)
-  if (!depsMap) return
-  const effects = depsMap.get(key)
-
-  const effectsToRun = new Set()
-  effects && effects.forEach(effectFn => {
-    // 优化 effectFn为当前正在活跃的副作用函数则不进行处理
-    if (effectFn !== activeEffect) {
-      effectsToRun.add(effectFn)
-    }
-  })
-  effectsToRun.forEach(effectFn => effectFn())
-  // effects && effects.forEach(effectFn => effectFn())
-}
-
-// 用一个全局变量存储当前激活的 effect 函数
-let activeEffect
-// effect 栈
-const effectStack = []
-
-function effect(fn) {
-  // 封装effectFn
-  const effectFn = () => {
-    // 在执行effectFn之前先清除所有依赖
-    cleanup(effectFn)
-    // 当调用 effect 注册副作用函数时，将副作用函数复制给 activeEffect
-    activeEffect = effectFn
-    // 在调用副作用函数之前将当前副作用函数压栈
-    effectStack.push(effectFn)
-    fn()
-    // 在当前副作用函数执行完毕后，将当前副作用函数弹出栈，并还原 activeEffect 为之前的值
-    effectStack.pop()
-    activeEffect = effectStack[effectStack.length - 1]
-  }
-  // activeEffect.deps 用来存储所有与该副作用函数相关的依赖集合
-  effectFn.deps = []
-  // 执行副作用函数
-  effectFn()
-}
-
-/* 清除副作用的所有依赖 */
-function cleanup(effectFn) {
-  for (let i = 0; i < effectFn.deps.length; i++) {
-    // 在对应的副作用依赖中，将该副作用删除
-    const deps = effectFn.deps[i]
-    deps.delete(effectFn)
-  }
-  // 清空副作用函数的所有依赖
-  effectFn.deps.length = 0
-}
-
-
-
-
-// =========================
 
 effect(() => {
-  console.log(99)
-  obj.foo++
+  console.log(p.bar)
 })
 
+p.foo++
 
-
-</script>
+  

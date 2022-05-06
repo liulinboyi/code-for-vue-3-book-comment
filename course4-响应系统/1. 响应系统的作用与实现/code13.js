@@ -1,12 +1,10 @@
-<body></body>
-<script>
 
 
 // 存储副作用函数的桶
 const bucket = new WeakMap()
 
 // 原始数据
-const data = { foo: 1 }
+const data = { foo: 1, bar: 2 }
 // 对原始数据的代理
 const obj = new Proxy(data, {
   // 拦截读取操作
@@ -25,7 +23,6 @@ const obj = new Proxy(data, {
   }
 })
 
-/* 将副作用函数 activeEffect 添加到存储副作用函数的桶中 */
 function track(target, key) {
   if (!activeEffect) return
   let depsMap = bucket.get(target)
@@ -36,13 +33,10 @@ function track(target, key) {
   if (!deps) {
     depsMap.set(key, (deps = new Set()))
   }
-  if (activeEffect) {
-    deps.add(activeEffect)
-    activeEffect.deps.push(deps)
-  }
+  deps.add(activeEffect)
+  activeEffect.deps.push(deps)
 }
 
-/* 把副作用函数从桶里取出并执行 */
 function trigger(target, key) {
   const depsMap = bucket.get(target)
   if (!depsMap) return
@@ -50,15 +44,12 @@ function trigger(target, key) {
 
   const effectsToRun = new Set()
   effects && effects.forEach(effectFn => {
-    // 优化 effectFn为当前正在活跃的副作用函数则不进行处理
     if (effectFn !== activeEffect) {
       effectsToRun.add(effectFn)
     }
   })
   effectsToRun.forEach(effectFn => {
-    // 添加了scheduler
     if (effectFn.options.scheduler) {
-      // 如果存在scheduler，则执行scheduler
       effectFn.options.scheduler(effectFn)
     } else {
       effectFn()
@@ -72,35 +63,37 @@ let activeEffect
 // effect 栈
 const effectStack = []
 
-function effect(fn, options = {} /* 添加参数options */) {
-  // 封装effectFn
+function effect(fn, options = {}) {
   const effectFn = () => {
     cleanup(effectFn)
     // 当调用 effect 注册副作用函数时，将副作用函数复制给 activeEffect
     activeEffect = effectFn
     // 在调用副作用函数之前将当前副作用函数压栈
     effectStack.push(effectFn)
-    fn()
+    const res = fn()
     // 在当前副作用函数执行完毕后，将当前副作用函数弹出栈，并还原 activeEffect 为之前的值
     effectStack.pop()
     activeEffect = effectStack[effectStack.length - 1]
+
+    return res
   }
   // 将 options 挂在到 effectFn 上
   effectFn.options = options
   // activeEffect.deps 用来存储所有与该副作用函数相关的依赖集合
   effectFn.deps = []
   // 执行副作用函数
-  effectFn()
+  if (!options.lazy) {
+    effectFn()
+  }
+
+  return effectFn
 }
 
-/* 清除副作用的所有依赖 */
 function cleanup(effectFn) {
   for (let i = 0; i < effectFn.deps.length; i++) {
-    // 在对应的副作用依赖中，将该副作用删除
     const deps = effectFn.deps[i]
     deps.delete(effectFn)
   }
-  // 清空副作用函数的所有依赖
   effectFn.deps.length = 0
 }
 
@@ -109,45 +102,100 @@ function cleanup(effectFn) {
 
 // =========================
 
-const jobQueue = new Set()
-const p = Promise.resolve()
+function traverse(value, seen = new Set()/*  */) {
+  if (typeof value !== 'object' || value === null || seen.has(value)) return
+  seen.add(value)
+  for (const k in value) {
+    traverse(value[k], seen)
+  }
 
-// 全局变量，当前是否在执行副作用函数队列
-let isFlushing = false
-/* 执行副作用函数队列 */
-function flushJob() {
-  // 如果正在执行副作用函数队列，则直接返回
-  if (isFlushing) return
-  // 开始执行副作用函数队列时，将isFlushing置为true
-  isFlushing = true
-  // 使用Promise，异步执行副作用函数队列
-  p.then(() => {
-    jobQueue.forEach(job => job())
-  }).finally(() => {
-    // 最终将isFlushing置为false
-    isFlushing = false
-  })
+  return value
+}
+
+function watch(source, cb, options = {}) {
+  let getter
+  if (typeof source === 'function') {
+    getter = source
+  } else {
+    getter = () => traverse(source)
+  }
+
+  let oldValue, newValue
+
+  let cleanup
+  function onInvalidate(fn) {
+    cleanup = fn
+  }
+
+  const job = () => {
+    newValue = effectFn()
+    if (cleanup) {
+      cleanup()
+    }
+    cb(oldValue, newValue, onInvalidate)
+    oldValue = newValue
+  }
+
+  const effectFn = effect(
+    // 执行 getter
+    () => getter(),
+    {
+      lazy: true,
+      scheduler: () => {
+        if (options.flush === 'post') {
+          const p = Promise.resolve()
+          p.then(job)
+        } else {
+          job()
+        }
+      }
+    }
+  )
+  
+  if (options.immediate) {
+    job()
+  } else {
+    oldValue = effectFn()
+  }
 }
 
 
-effect(() => {
-  console.log(obj.foo)
-}, {
-  // 添加options
-  // 添加scheduler，在执行副作用函数时，
-  // 如果存在scheduler，则将副作用函数传进去
-  scheduler(fn /* 副作用函数 */) {
-    debugger
-    // 将副作用函数添加到jobQueue中
-    jobQueue.add(fn)
-    // 执行掉副作用函数队列jobQueue
-    flushJob()
-  }
+watch(obj, (newVal, oldVal) => {
+    console.log(newVal, oldVal)
 })
+// let count = 0
+// function fetch() {
+//   count++
+//   const res = count === 1 ? 'A' : 'B'
+//   return new Promise(resolve => {
+//     setTimeout(() => {
+//       resolve(res)
+//     }, count === 1 ? 1000 : 100);
+//   })
+// }
 
-obj.foo++
-obj.foo++
+// let finallyData
+
+// watch(() => obj.foo, async (newVal, oldVal, onInvalidate) => {
+//   let valid = true
+//   onInvalidate(() => {
+//     valid = false
+//   })
+//   const res = await fetch()
+
+//   if (!valid) return
+
+//   finallyData = res
+//   console.log(finallyData)
+// })
+
+// obj.foo++
+// setTimeout(() => {
+//   obj.foo++
+// }, 200);
 
 
 
-</script>
+
+
+

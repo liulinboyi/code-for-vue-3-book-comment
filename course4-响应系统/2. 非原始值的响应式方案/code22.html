@@ -35,6 +35,7 @@ function trigger(target, key, type, newVal) {
     }
   })
   
+  // ADD || DELETE || MAP SET
   if (
     type === 'ADD' ||
     type === 'DELETE' ||
@@ -190,7 +191,9 @@ const mutableInstrumentations = {
       trigger(target, key, 'SET')
     }
   },
+  // 添加了forEach
   forEach(callback) {
+    // 封装处理函数
     const wrap = (val) => typeof val === 'object' ? reactive(val) : val
     const target = this.raw
     track(target, ITERATE_KEY)

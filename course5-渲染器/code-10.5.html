@@ -117,6 +117,7 @@ function createRenderer(options) {
         patch(null, newChildren[i], container, oldStartVNode.el)
       }
     } else if (newEndIdx < newStartIdx && oldStartIdx <= oldEndIdx) {
+      // add
       // 移除操作
       for (let i = oldStartIdx; i <= oldEndIdx; i++) {
         unmount(oldChildren[i])

@@ -16,6 +16,7 @@ function createRenderer(options) {
     setElementText
   } = options
 
+  /* 是否应该设置为props，而不是设置为attribute */
   function shouldSetAsProps(el, key, value) {
     if (key === 'form' && el.tagName === 'INPUT') return false
     return key in el
@@ -34,6 +35,7 @@ function createRenderer(options) {
     if (vnode.props) {
       for (const key in vnode.props) {
         const value = vnode.props[key]
+        // 可以设置为props或者attribute，这个需要判断
         if (shouldSetAsProps(el, key, value)) {
           const type = typeof el[key]
           if (type === 'boolean' && value === '') {

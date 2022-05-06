@@ -25,6 +25,7 @@ const obj = new Proxy(data, {
   }
 })
 
+/* 将副作用函数 activeEffect 添加到存储副作用函数的桶中 */
 function track(target, key) {
   let depsMap = bucket.get(target)
   if (!depsMap) {
@@ -38,11 +39,13 @@ function track(target, key) {
   activeEffect.deps.push(deps)
 }
 
+/* 把副作用函数从桶里取出并执行 */
 function trigger(target, key) {
   const depsMap = bucket.get(target)
   if (!depsMap) return
   const effects = depsMap.get(key)
 
+  // 加一个set数据结构，去除重复的副作用函数
   const effectsToRun = new Set()
   effects && effects.forEach(effectFn => effectsToRun.add(effectFn))
   effectsToRun.forEach(effectFn => effectFn())
@@ -51,11 +54,13 @@ function trigger(target, key) {
 
 // 用一个全局变量存储当前激活的 effect 函数
 let activeEffect
-// effect 栈
+// effect 栈 为了解决递归依赖 effect里面调用effect
 const effectStack = []
 
 function effect(fn) {
+  // 封装effectFn
   const effectFn = () => {
+    // 在执行effectFn之前先清除所有依赖
     cleanup(effectFn)
     // 当调用 effect 注册副作用函数时，将副作用函数复制给 activeEffect
     activeEffect = effectFn
@@ -72,11 +77,14 @@ function effect(fn) {
   effectFn()
 }
 
+/* 清除副作用的所有依赖 */
 function cleanup(effectFn) {
   for (let i = 0; i < effectFn.deps.length; i++) {
+    // 在对应的副作用依赖中，将该副作用删除
     const deps = effectFn.deps[i]
     deps.delete(effectFn)
   }
+  // 清空副作用函数的所有依赖
   effectFn.deps.length = 0
 }
 

@@ -52,6 +52,8 @@ function trigger(target, key, type, newVal) {
     })
   }
 
+  // 处理Map的ADD和DELETE
+  // 但是如果是Add，上面就会执行，这里就重复了，还好用的是Set存储，不怕重复
   if ((
     type === 'ADD' || type === 'DELETE') &&
     Object.prototype.toString.call(target) === '[object Map]'
@@ -212,9 +214,13 @@ const mutableInstrumentations = {
     })
   },
 
+  // 添加了迭代器
   [Symbol.iterator]: iterationMethod,
+  // entries
   entries: iterationMethod,
+  // keys
   keys: keysIterationMethod,
+  // values
   values: valuesIterationMethod,
 }
 
@@ -315,6 +321,7 @@ const p = reactive(new Map([
 ]))
 
 effect(() => {
+  console.log('----------------------------')
   for (const value of p.keys()) {
     console.log(value)
   }

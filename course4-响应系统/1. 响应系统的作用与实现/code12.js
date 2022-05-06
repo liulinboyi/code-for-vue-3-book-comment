@@ -1,12 +1,10 @@
-<body></body>
-<script>
 
 
 // 存储副作用函数的桶
 const bucket = new WeakMap()
 
 // 原始数据
-const data = { foo: 1 }
+const data = { foo: 1, bar: 2 }
 // 对原始数据的代理
 const obj = new Proxy(data, {
   // 拦截读取操作
@@ -25,8 +23,8 @@ const obj = new Proxy(data, {
   }
 })
 
-/* 将副作用函数 activeEffect 添加到存储副作用函数的桶中 */
 function track(target, key) {
+  if (!activeEffect) return
   let depsMap = bucket.get(target)
   if (!depsMap) {
     bucket.set(target, (depsMap = new Map()))
@@ -35,13 +33,10 @@ function track(target, key) {
   if (!deps) {
     depsMap.set(key, (deps = new Set()))
   }
-  if (activeEffect) {
-    deps.add(activeEffect)
-    activeEffect.deps.push(deps)
-  }
+  deps.add(activeEffect)
+  activeEffect.deps.push(deps)
 }
 
-/* 把副作用函数从桶里取出并执行 */
 function trigger(target, key) {
   const depsMap = bucket.get(target)
   if (!depsMap) return
@@ -49,12 +44,17 @@ function trigger(target, key) {
 
   const effectsToRun = new Set()
   effects && effects.forEach(effectFn => {
-    // 优化 effectFn为当前正在活跃的副作用函数则不进行处理
     if (effectFn !== activeEffect) {
       effectsToRun.add(effectFn)
     }
   })
-  effectsToRun.forEach(effectFn => effectFn())
+  effectsToRun.forEach(effectFn => {
+    if (effectFn.options.scheduler) {
+      effectFn.options.scheduler(effectFn)
+    } else {
+      effectFn()
+    }
+  })
   // effects && effects.forEach(effectFn => effectFn())
 }
 
@@ -63,34 +63,37 @@ let activeEffect
 // effect 栈
 const effectStack = []
 
-function effect(fn) {
-  // 封装effectFn
+function effect(fn, options = {}) {
   const effectFn = () => {
-    // 在执行effectFn之前先清除所有依赖
     cleanup(effectFn)
     // 当调用 effect 注册副作用函数时，将副作用函数复制给 activeEffect
     activeEffect = effectFn
     // 在调用副作用函数之前将当前副作用函数压栈
     effectStack.push(effectFn)
-    fn()
+    const res = fn()
     // 在当前副作用函数执行完毕后，将当前副作用函数弹出栈，并还原 activeEffect 为之前的值
     effectStack.pop()
     activeEffect = effectStack[effectStack.length - 1]
+
+    return res
   }
+  // 将 options 挂在到 effectFn 上
+  effectFn.options = options
   // activeEffect.deps 用来存储所有与该副作用函数相关的依赖集合
   effectFn.deps = []
   // 执行副作用函数
-  effectFn()
+  if (!options.lazy) {
+    effectFn()
+  }
+
+  return effectFn
 }
 
-/* 清除副作用的所有依赖 */
 function cleanup(effectFn) {
   for (let i = 0; i < effectFn.deps.length; i++) {
-    // 在对应的副作用依赖中，将该副作用删除
     const deps = effectFn.deps[i]
     deps.delete(effectFn)
   }
-  // 清空副作用函数的所有依赖
   effectFn.deps.length = 0
 }
 
@@ -99,11 +102,63 @@ function cleanup(effectFn) {
 
 // =========================
 
-effect(() => {
-  console.log(99)
-  obj.foo++
+/* 为对象的其他属性添加副作用函数 */
+function traverse(value, seen = new Set()) {
+  if (typeof value !== 'object' || value === null || seen.has(value)) return
+  seen.add(value)
+  for (const k in value) {
+    traverse(value[k], seen)
+  }
+
+  return value
+}
+
+function watch(source, cb, options = {}) {
+  let getter
+  if (typeof source === 'function') {
+    getter = source
+  } else {
+    getter = () => traverse(source)
+  }
+
+  let oldValue, newValue
+
+  const job = () => {
+    newValue = effectFn()
+    cb(oldValue, newValue)
+    oldValue = newValue
+  }
+
+  const effectFn = effect(
+    // 执行 getter
+    () => getter(),
+    {
+      lazy: true,
+      scheduler: () => {
+        if (options.flush === 'post') {
+          const p = Promise.resolve()
+          p.then(job)
+        } else {
+          job()
+        }
+      }
+    }
+  )
+  
+  if (options.immediate) {
+    job()
+  } else {
+    oldValue = effectFn()
+  }
+}
+
+watch(() => obj.foo, (newVal, oldVal) => {
+  console.log(newVal, oldVal)
+}, {
+  immediate: true,
+  flush: 'post'
 })
 
-
-
-</script>
+setTimeout(() => {
+  obj.foo++
+}, 1000)

@@ -12,13 +12,18 @@ function createRenderer(options) {
   } = options
 
   function mountElement(vnode, container) {
-    const el = createElement(vnode.type)
+    if (vnode.type === Text) {
+      setElementText(container, vnode.children)
+    } else {
+      const el = createElement(vnode.type)
 
-    if (typeof vnode.children === 'string') {
-      setElementText(el, vnode.children)
+      if (typeof vnode.children === 'string') {
+        setElementText(el, vnode.children)
+      }
+
+      insert(el, container)
     }
 
-    insert(el, container)
   }
 
   function patch(n1, n2, container) {

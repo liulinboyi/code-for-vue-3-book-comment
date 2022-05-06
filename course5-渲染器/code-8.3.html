@@ -8,6 +8,7 @@
 <script src="https://unpkg.com/@vue/reactivity@3.0.5/dist/reactivity.global.js"></script>
 <script>
 
+/* 是否应该设置为props，而不是设置为attribute */
 function shouldSetAsProps(el, key, value) {
   if (key === 'form' && el.tagName === 'INPUT') return false
   return key in el
@@ -79,6 +80,7 @@ const renderer = createRenderer({
   insert(el, parent, anchor = null) {
     parent.insertBefore(el, anchor)
   },
+  // patchProps也可以做为配置传入
   patchProps(el, key, preValue, nextValue) {
     if (shouldSetAsProps(el, key, nextValue)) {
       const type = typeof el[key]

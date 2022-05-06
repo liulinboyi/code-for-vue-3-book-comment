@@ -1,105 +1,13 @@
-<body></body>
-<script>
 
 
 // 存储副作用函数的桶
 const bucket = new WeakMap()
 const ITERATE_KEY = Symbol()
 
-function reactive(obj) {
-  return createReactive(obj)
-}
-function shallowReactive(obj) {
-  return createReactive(obj, true)
-}
-
-function readonly(obj) {
-  return createReactive(obj, false, true)
-}
-
-function shallowReadonly(obj) {
-  return createReactive(obj, true, true)
-}
-
-
-function createReactive(obj, isShallow = false, isReadonly = false) {
-  return new Proxy(obj, {
-    // 拦截读取操作
-    get(target, key, receiver) {
-      console.log('get: ', key)
-      if (key === 'raw') {
-        return target
-      }
-
-      // 非只读的时候才需要建立响应联系
-      if (!isReadonly) {
-        track(target, key)
-      }
-
-      const res = Reflect.get(target, key, receiver)
-
-      if (isShallow) {
-        return res
-      }
-
-      if (typeof res === 'object' && res !== null) {
-        // 深只读/响应
-        return isReadonly ? readonly(res) : reactive(res)
-      }
-
-      return res
-    },
-    // 拦截设置操作
-    set(target, key, newVal, receiver) {
-      console.log('set: ', key )
-      if (isReadonly) {
-        console.warn(`属性 ${key} 是只读的`)
-        return true
-      }
-      const oldVal = target[key]
-      // 如果属性不存在，则说明是在添加新的属性，否则是设置已存在的属性
-      const type = Array.isArray(target)
-        ? Number(key) < target.length ? 'SET' : 'ADD'
-        : Object.prototype.hasOwnProperty.call(target, key) ? 'SET' : 'ADD'
-      // 设置属性值
-      const res = Reflect.set(target, key, newVal, receiver)
-      if (target === receiver.raw) {
-        if (oldVal !== newVal && (oldVal === oldVal || newVal === newVal)) {
-          trigger(target, key, type, newVal)
-        }
-      }
-
-      return res
-    },
-    has(target, key) {
-      track(target, key)
-      return Reflect.has(target, key)
-    },
-    ownKeys(target) {
-      console.log('ownkeys: ')
-      // 数组遍历需要单独处理，收集lenght的依赖
-      track(target, Array.isArray(target) ? 'length' : ITERATE_KEY)
-      return Reflect.ownKeys(target)
-    },
-    deleteProperty(target, key) {
-      if (isReadonly) {
-        console.warn(`属性 ${key} 是只读的`)
-        return true
-      }
-      const hadKey = Object.prototype.hasOwnProperty.call(target, key)
-      const res = Reflect.deleteProperty(target, key)
-
-      if (res && hadKey) {
-        trigger(target, key, 'DELETE')
-      }
-
-      return res
-    }
-  })
-}
+let shouldTrack = true
 
 function track(target, key) {
-  if (!activeEffect) return
+  if (!activeEffect || !shouldTrack) return
   let depsMap = bucket.get(target)
   if (!depsMap) {
     bucket.set(target, (depsMap = new Map()))
@@ -113,6 +21,7 @@ function track(target, key) {
 }
 
 function trigger(target, key, type, newVal) {
+  console.log('trigger', key)
   const depsMap = bucket.get(target)
   if (!depsMap) return
   const effects = depsMap.get(key)
@@ -202,20 +111,76 @@ function cleanup(effectFn) {
   effectFn.deps.length = 0
 }
 
+const instrumentations = {
+  delete(key) {
+    const target = this.raw
+
+    const res = target.delete(key)
+
+    console.log(res)
+
+    trigger(target, key, 'DELETE')
+
+    return res
+  }
+}
+
+const reactiveMap = new Map()
+function reactive(obj) {
+  const proxy = createReactive(obj)
+
+  const existionProxy = reactiveMap.get(obj)
+  if (existionProxy) return existionProxy
+
+  reactiveMap.set(obj, proxy)
+
+  return proxy
+}
+
+// ADD和DELETE统一在这里处理了
+const mutableInstrumentations = {
+  add(key) {
+    const target = this.raw
+    const hadKey = target.has(key)
+    const res = target.add(key)
+    if (!hadKey) {
+      trigger(target, key, 'ADD')
+    }
+    return res
+  },
+  delete(key) {
+    const target = this.raw
+    const res = target.delete(key)
+    trigger(target, key, 'DELETE')
+    return res
+  }
+}
+
+function createReactive(obj, isShallow = false, isReadonly = false) {
+  return new Proxy(obj, {
+    get(target, key, receiver) {
+      if (key === 'raw') return target
+      if (key === 'size') {
+        // 收集size依赖
+        track(target, ITERATE_KEY)
+        return Reflect.get(target, key, target)
+      }
+
+      return mutableInstrumentations[key]
+    }
+  })
+}
+
 // =================================================================
 
-
-const arr = reactive(['foo'])
+const p = reactive(new Set([1, 2, 3])) 
 
 effect(() => {
-  console.log('--------------------------')
-  for (const key in arr) {
-    console.log(key)
-  }
+  console.log(p.size)
 })
 
-arr[1] = 'bar'
-arr.length = 0
+p.add(1)
+p.delete(1)
 
 
-</script>
+

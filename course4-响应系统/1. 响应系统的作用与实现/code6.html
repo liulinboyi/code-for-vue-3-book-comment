@@ -25,6 +25,7 @@ const obj = new Proxy(data, {
   }
 })
 
+/* 将副作用函数 activeEffect 添加到存储副作用函数的桶中 */
 function track(target, key) {
   let depsMap = bucket.get(target)
   if (!depsMap) {
@@ -37,6 +38,7 @@ function track(target, key) {
   deps.add(activeEffect)
 }
 
+/* 把副作用函数从桶里取出并执行 */
 function trigger(target, key) {
   const depsMap = bucket.get(target)
   if (!depsMap) return
@@ -59,6 +61,7 @@ effect(() => {
 })
 
 setTimeout(() => {
+  // 执行副作用函数 把副作用函数从桶里取出并执行
   trigger(data, 'text')
 }, 1000)
 

@@ -8,12 +8,15 @@ const ITERATE_KEY = Symbol()
 
 const reactiveMap = new Map()
 
+/* 变成响应式后 值的映射 做缓存 */
 function reactive(obj) {
   const proxy = createReactive(obj)
 
+  // 避免重复响应式
   const existionProxy = reactiveMap.get(obj)
   if (existionProxy) return existionProxy
 
+  // 做映射 存起来
   reactiveMap.set(obj, proxy)
 
   return proxy
@@ -30,10 +33,14 @@ function shallowReadonly(obj) {
   return createReactive(obj, true, true)
 }
 
+// 被修改的数组方法
 const arrayInstrumentations = {}
 
+// 对数组常用方法做处理
 ;['includes', 'indexOf', 'lastIndexOf'].forEach(method => {
+  // 原始方法
   const originMethod = Array.prototype[method]
+  // 被修改的数组方法
   arrayInstrumentations[method] = function(...args) {
     // this 是代理对象，先在代理对象中查找，将结果存储到 res 中
     let res = originMethod.apply(this, args)
@@ -48,12 +55,16 @@ const arrayInstrumentations = {}
 })
 
 
+// 添加shouldTrack来控制是否应该收集依赖
 let shouldTrack = true
+// 修改push操作
 ;['push'].forEach(method => {
   const originMethod = Array.prototype[method]
   arrayInstrumentations[method] = function(...args) {
+    // 在push之前停止收集依赖
     shouldTrack = false
     let res = originMethod.apply(this, args)
+    // push成功之后，开启收集依赖
     shouldTrack = true
     return res
   }
@@ -139,7 +150,7 @@ function createReactive(obj, isShallow = false, isReadonly = false) {
 }
 
 function track(target, key) {
-  if (!activeEffect || !shouldTrack) return
+  if (!activeEffect || !shouldTrack /* 是否收集依赖开关 */) return
   let depsMap = bucket.get(target)
   if (!depsMap) {
     bucket.set(target, (depsMap = new Map()))

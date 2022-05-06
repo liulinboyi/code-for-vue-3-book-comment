@@ -68,6 +68,7 @@ function createRenderer(options) {
     let newStartVNode = newChildren[newStartIdx]
     let newEndVNode = newChildren[newEndIdx]
 
+    // add
     while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
       if (!oldStartVNode) {
         oldStartVNode = oldChildren[++oldStartIdx]

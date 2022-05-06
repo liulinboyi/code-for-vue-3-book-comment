@@ -1,14 +1,13 @@
-<body></body>
-<script>
 
 
 // 存储副作用函数的桶
 const bucket = new WeakMap()
+const ITERATE_KEY = Symbol()
 
 // 原始数据
-const data = { foo: 1 }
+const obj = { foo: 1, bar: 2 }
 // 对原始数据的代理
-const obj = new Proxy(data, {
+const p = new Proxy(obj, {
   // 拦截读取操作
   get(target, key) {
     // 将副作用函数 activeEffect 添加到存储副作用函数的桶中
@@ -17,15 +16,39 @@ const obj = new Proxy(data, {
     return target[key]
   },
   // 拦截设置操作
-  set(target, key, newVal) {
+  set(target, key, newVal, receiver) {
+    // 如果属性不存在，则说明是在添加新的属性，否则是设置已存在的属性
+    const type = Object.prototype.hasOwnProperty.call(target, key) ? 'SET' : 'ADD'
+
     // 设置属性值
-    target[key] = newVal
-    // 把副作用函数从桶里取出并执行
-    trigger(target, key)
+    const res = Reflect.set(target, key, newVal, receiver)
+
+    // 将 type 作为第三个参数传递给 trigger 函数
+    trigger(target, key, type)
+
+    return res
+  },
+  has(target, key) {
+    track(target, key)
+    return Reflect.has(target, key)
+  },
+  ownKeys(target) {
+    track(target, ITERATE_KEY)
+    return Reflect.ownKeys(target)
+  },
+  // 添加删除属性处理
+  deleteProperty(target, key) {
+    const hadKey = Object.prototype.hasOwnProperty.call(target, key)
+    const res = Reflect.deleteProperty(target, key)
+
+    if (res && hadKey) {
+      trigger(target, key, 'DELETE')
+    }
+
+    return res
   }
 })
 
-/* 将副作用函数 activeEffect 添加到存储副作用函数的桶中 */
 function track(target, key) {
   if (!activeEffect) return
   let depsMap = bucket.get(target)
@@ -36,35 +59,42 @@ function track(target, key) {
   if (!deps) {
     depsMap.set(key, (deps = new Set()))
   }
-  if (activeEffect) {
-    deps.add(activeEffect)
-    activeEffect.deps.push(deps)
-  }
+  deps.add(activeEffect)
+  activeEffect.deps.push(deps)
 }
 
-/* 把副作用函数从桶里取出并执行 */
-function trigger(target, key) {
+function trigger(target, key, type) {
   const depsMap = bucket.get(target)
   if (!depsMap) return
   const effects = depsMap.get(key)
 
   const effectsToRun = new Set()
   effects && effects.forEach(effectFn => {
-    // 优化 effectFn为当前正在活跃的副作用函数则不进行处理
     if (effectFn !== activeEffect) {
       effectsToRun.add(effectFn)
     }
   })
+
+  console.log(type, key)
+  
+  // 添加了ADD、DELETE类型
+  // 只有添加新属性、删除属性才会把iterateEffects添加到副作用函数中
+  if (type === 'ADD' || type === 'DELETE') {
+    const iterateEffects /* 迭代副作用函数 */ = depsMap.get(ITERATE_KEY)
+    iterateEffects && iterateEffects.forEach(effectFn => {
+      if (effectFn !== activeEffect) {
+        effectsToRun.add(effectFn)
+      }
+    })
+  }
+
   effectsToRun.forEach(effectFn => {
-    // 添加了scheduler
     if (effectFn.options.scheduler) {
-      // 如果存在scheduler，则执行scheduler
       effectFn.options.scheduler(effectFn)
     } else {
       effectFn()
     }
   })
-  // effects && effects.forEach(effectFn => effectFn())
 }
 
 // 用一个全局变量存储当前激活的 effect 函数
@@ -72,82 +102,50 @@ let activeEffect
 // effect 栈
 const effectStack = []
 
-function effect(fn, options = {} /* 添加参数options */) {
-  // 封装effectFn
+function effect(fn, options = {}) {
   const effectFn = () => {
     cleanup(effectFn)
     // 当调用 effect 注册副作用函数时，将副作用函数复制给 activeEffect
     activeEffect = effectFn
     // 在调用副作用函数之前将当前副作用函数压栈
     effectStack.push(effectFn)
-    fn()
+    const res = fn()
     // 在当前副作用函数执行完毕后，将当前副作用函数弹出栈，并还原 activeEffect 为之前的值
     effectStack.pop()
     activeEffect = effectStack[effectStack.length - 1]
+
+    return res
   }
   // 将 options 挂在到 effectFn 上
   effectFn.options = options
   // activeEffect.deps 用来存储所有与该副作用函数相关的依赖集合
   effectFn.deps = []
   // 执行副作用函数
-  effectFn()
+  if (!options.lazy) {
+    effectFn()
+  }
+
+  return effectFn
 }
 
-/* 清除副作用的所有依赖 */
 function cleanup(effectFn) {
   for (let i = 0; i < effectFn.deps.length; i++) {
-    // 在对应的副作用依赖中，将该副作用删除
     const deps = effectFn.deps[i]
     deps.delete(effectFn)
   }
-  // 清空副作用函数的所有依赖
   effectFn.deps.length = 0
 }
 
-
-
-
-// =========================
-
-const jobQueue = new Set()
-const p = Promise.resolve()
-
-// 全局变量，当前是否在执行副作用函数队列
-let isFlushing = false
-/* 执行副作用函数队列 */
-function flushJob() {
-  // 如果正在执行副作用函数队列，则直接返回
-  if (isFlushing) return
-  // 开始执行副作用函数队列时，将isFlushing置为true
-  isFlushing = true
-  // 使用Promise，异步执行副作用函数队列
-  p.then(() => {
-    jobQueue.forEach(job => job())
-  }).finally(() => {
-    // 最终将isFlushing置为false
-    isFlushing = false
-  })
-}
-
+// =================================================================
 
 effect(() => {
-  console.log(obj.foo)
-}, {
-  // 添加options
-  // 添加scheduler，在执行副作用函数时，
-  // 如果存在scheduler，则将副作用函数传进去
-  scheduler(fn /* 副作用函数 */) {
-    debugger
-    // 将副作用函数添加到jobQueue中
-    jobQueue.add(fn)
-    // 执行掉副作用函数队列jobQueue
-    flushJob()
+  for (const key in p) {
+    console.log('key: ', key)
   }
 })
 
-obj.foo++
-obj.foo++
+delete p.foo
 
 
 
-</script>
+

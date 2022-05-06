@@ -44,6 +44,7 @@ function createRenderer(options) {
       }
       setElementText(container, n2.children)
     } else if (Array.isArray(n2.children)) {
+      // add
       patchKeyedChildren(n1, n2, container)
     } else {
       if (Array.isArray(n1.children)) {

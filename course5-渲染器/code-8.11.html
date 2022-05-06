@@ -114,6 +114,7 @@ function createRenderer(options) {
           setText(el, n2.children)
         }
       }
+      // add
     } else if (type === Fragment) {
       if (!n1) {
         n2.children.forEach(c => patch(null, c, container))

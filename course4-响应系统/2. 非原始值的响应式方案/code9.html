@@ -13,11 +13,16 @@ function shallowReactive(obj) {
   return createReactive(obj, true)
 }
 
+function hasChanged(a,b) {
+    return !Object.is(a,b)
+}
 
+/* 添加isShallow参数 */
 function createReactive(obj, isShallow = false) {
   return new Proxy(obj, {
     // 拦截读取操作
     get(target, key, receiver) {
+      // 读取原型链相关
       if (key === 'raw') {
         return target
       }
@@ -27,11 +32,14 @@ function createReactive(obj, isShallow = false) {
 
       const res = Reflect.get(target, key, receiver)
 
+      // 浅层
       if (isShallow) {
         return res
       }
 
+      // 如果是对象
       if (typeof res === 'object' && res !== null) {
+        // 递归调用reactive
         return reactive(res)
       }
 
@@ -43,9 +51,10 @@ function createReactive(obj, isShallow = false) {
       // 如果属性不存在，则说明是在添加新的属性，否则是设置已存在的属性
       const type = Object.prototype.hasOwnProperty.call(target, key) ? 'SET' : 'ADD'
       // 设置属性值
+      // 会去原型链上找对应的属性，去执行原型链上对象的set，去赋值
       const res = Reflect.set(target, key, newVal, receiver)
       if (target === receiver.raw) {
-        if (oldVal !== newVal && (oldVal === oldVal || newVal === newVal)) {
+        if (hasChanged(oldVal,newVal)) {
           trigger(target, key, type)
         }
       }

@@ -131,6 +131,7 @@ function trigger(target, key, type, newVal) {
   }
 
   if (type === 'ADD' && Array.isArray(target)) {
+    // 数组length属性 副作用函数
     const lengthEffects = depsMap.get('length')
     lengthEffects && lengthEffects.forEach(effectFn => {
       if (effectFn !== activeEffect) {
@@ -140,7 +141,8 @@ function trigger(target, key, type, newVal) {
   }
 
   if (Array.isArray(target) && key === 'length') {
-    depsMap.forEach((effects, key) => {
+    // 修改数组length 副作用函数
+    depsMap/* target的所有依赖 */.forEach((effects, key) => {
       if (key >= newVal) {
         effects.forEach(effectFn => {
           if (effectFn !== activeEffect) {
@@ -205,9 +207,11 @@ function cleanup(effectFn) {
 const arr = reactive(['foo'])
 
 effect(() => {
+  // 收集数组索引依赖
   console.log(arr[0]) // foo
 })
 
+// 修改数组的length 触发副作用函数
 arr.length = 0
 
 

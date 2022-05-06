@@ -41,6 +41,7 @@ function createRenderer(options) {
     insert(el, container)
   }
 
+  /* 补丁元素 */
   function patchElement(n1, n2) {
     const el = n2.el = n1.el
     const oldProps = n1.props
@@ -58,6 +59,7 @@ function createRenderer(options) {
     }
   }
 
+  /* 卸载 */
   function unmount(vnode) {
     const parent = vnode.el.parentNode
     if (parent) {
@@ -65,10 +67,13 @@ function createRenderer(options) {
     }
   }
 
-  function patch(n1, n2, container) {
-    if (!n1) {
+  /* 补丁 */
+  function patch(n1 /* 旧node */, n2 /* 新node */, container) {
+    if (!n1 /* 没有旧node */) {
+      // 挂载元素
       mountElement(n2, container)
     } else {
+      // 添加patchElement
       patchElement(n1, n2)
     }
   }
@@ -103,6 +108,7 @@ const renderer = createRenderer({
     parent.insertBefore(el, anchor)
   },
   patchProps(el, key, preValue, nextValue) {
+    // 对class进行单独处理
     if (key === 'class') {
       el.className = nextValue || ''
     } else if (shouldSetAsProps(el, key, nextValue)) {

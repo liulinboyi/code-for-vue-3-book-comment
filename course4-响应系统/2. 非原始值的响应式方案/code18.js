@@ -1,13 +1,25 @@
-<body></body>
-<script>
 
 
 // 存储副作用函数的桶
 const bucket = new WeakMap()
 const ITERATE_KEY = Symbol()
 
+const reactiveMap = new Map()
+
+let shouldTrack = true
+
+/* 变成响应式后 值的映射 做缓存 */
 function reactive(obj) {
-  return createReactive(obj)
+  const proxy = createReactive(obj)
+
+  // 避免重复响应式
+  const existionProxy = reactiveMap.get(obj)
+  if (existionProxy) return existionProxy
+
+  // 做映射 存起来
+  reactiveMap.set(obj, proxy)
+
+  return proxy
 }
 function shallowReactive(obj) {
   return createReactive(obj, true)
@@ -21,85 +33,8 @@ function shallowReadonly(obj) {
   return createReactive(obj, true, true)
 }
 
-
-function createReactive(obj, isShallow = false, isReadonly = false) {
-  return new Proxy(obj, {
-    // 拦截读取操作
-    get(target, key, receiver) {
-      console.log('get: ', key)
-      if (key === 'raw') {
-        return target
-      }
-
-      // 非只读的时候才需要建立响应联系
-      if (!isReadonly && typeof key !== 'symbol' /* key不等于symbol */) {
-        track(target, key)
-      }
-
-      const res = Reflect.get(target, key, receiver)
-
-      if (isShallow) {
-        return res
-      }
-
-      if (typeof res === 'object' && res !== null) {
-        // 深只读/响应
-        return isReadonly ? readonly(res) : reactive(res)
-      }
-
-      return res
-    },
-    // 拦截设置操作
-    set(target, key, newVal, receiver) {
-      console.log('set: ', key )
-      if (isReadonly) {
-        console.warn(`属性 ${key} 是只读的`)
-        return true
-      }
-      const oldVal = target[key]
-      // 如果属性不存在，则说明是在添加新的属性，否则是设置已存在的属性
-      const type = Array.isArray(target)
-        ? Number(key) < target.length ? 'SET' : 'ADD'
-        : Object.prototype.hasOwnProperty.call(target, key) ? 'SET' : 'ADD'
-      // 设置属性值
-      const res = Reflect.set(target, key, newVal, receiver)
-      if (target === receiver.raw) {
-        if (oldVal !== newVal && (oldVal === oldVal || newVal === newVal)) {
-          trigger(target, key, type, newVal)
-        }
-      }
-
-      return res
-    },
-    has(target, key) {
-      track(target, key)
-      return Reflect.has(target, key)
-    },
-    ownKeys(target) {
-      console.log('ownkeys: ')
-      // 数组遍历需要单独处理，收集lenght的依赖
-      track(target, Array.isArray(target) ? 'length' : ITERATE_KEY)
-      return Reflect.ownKeys(target)
-    },
-    deleteProperty(target, key) {
-      if (isReadonly) {
-        console.warn(`属性 ${key} 是只读的`)
-        return true
-      }
-      const hadKey = Object.prototype.hasOwnProperty.call(target, key)
-      const res = Reflect.deleteProperty(target, key)
-
-      if (res && hadKey) {
-        trigger(target, key, 'DELETE')
-      }
-
-      return res
-    }
-  })
-}
-
 function track(target, key) {
-  if (!activeEffect) return
+  if (!activeEffect || !shouldTrack) return
   let depsMap = bucket.get(target)
   if (!depsMap) {
     bucket.set(target, (depsMap = new Map()))
@@ -113,6 +48,7 @@ function track(target, key) {
 }
 
 function trigger(target, key, type, newVal) {
+  console.log('trigger', key)
   const depsMap = bucket.get(target)
   if (!depsMap) return
   const effects = depsMap.get(key)
@@ -202,20 +138,51 @@ function cleanup(effectFn) {
   effectFn.deps.length = 0
 }
 
+const instrumentations = {
+  delete(key) {
+    const target = this.raw
+
+    const res = target.delete(key)
+
+    console.log(res)
+
+    trigger(target, key, 'DELETE')
+
+    return res
+  }
+}
+
+function createReactive(obj, isShallow = false, isReadonly = false) {
+  return new Proxy(obj, {
+    get(target, key, receiver) {
+      if (key === 'raw') return target
+      // get key is size
+      if (key === 'size') {
+        track(target, ITERATE_KEY)
+        return Reflect.get(target, key, target)
+      }
+
+      return Reflect.get(instrumentations, key)
+    }
+  })
+}
+
 // =================================================================
 
+const s = new Set([1, 2, 3])
+// const p = new Proxy(s, {
+//     get(target, key, receiver) {
+//       if (key === 'size') {
+//         return Reflect.get(target, key, target)
+//       }
 
-const arr = reactive([1, 2, 3, 4, 5])
+//       return Reflect.get(target, key, receiver)
+//     }
+//   }
+// )
+const p = reactive(s)
 
-effect(() => {
-  console.log('-----------------------------')
-  for (const val of arr.keys()) {
-    console.log(val)
-  }
-})
-
-arr[1] = 'bar'
-arr.length = 0
+p.delete(1)
 
 
-</script>
+

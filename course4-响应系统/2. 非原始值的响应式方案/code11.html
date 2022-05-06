@@ -131,6 +131,7 @@ function trigger(target, key, type) {
   }
 
   if (type === 'ADD' && Array.isArray(target)) {
+    // 数组length属性 副作用函数
     const lengthEffects = depsMap.get('length')
     lengthEffects && lengthEffects.forEach(effectFn => {
       if (effectFn !== activeEffect) {
@@ -193,9 +194,11 @@ function cleanup(effectFn) {
 const arr = reactive(['foo'])
 
 effect(() => {
+  // 收集数组length依赖
   console.log(arr.length)
 })
 
+// 添加数组元素 触发length副作用函数
 arr[1] = 'bar'
 
 

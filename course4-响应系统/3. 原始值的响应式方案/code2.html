@@ -260,6 +260,7 @@ const obj = reactive({ foo: 1, bar: 2 })
 
 function toRefs(obj) {
   const ret = {}
+  // 通过遍历调用toRef来处理
   for (const key in obj) {
     ret[key] = toRef(obj, key)
   }
@@ -267,6 +268,7 @@ function toRefs(obj) {
 }
 
 function toRef(obj, key) {
+  // 包一层 value
   const wrapper = {
     get value() {
       return obj[key]
