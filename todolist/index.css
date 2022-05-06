@@ -1,0 +1,35 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+.list {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: 1;
+}
+
+.list:hover {
+    background: #999;
+    cursor: pointer;
+}
+
+.list>h1 {
+    flex: 1;
+}
+
+input[type=checkbox] {
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+}
+
+.wrapper {
+    display: flex;
+    width: 500px;
+    margin: 20px auto;
+    padding: 20px;
+    flex-direction: column;
+}
