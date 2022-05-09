@@ -7,6 +7,8 @@
 //   }
 // );
 
+h("div", ["1", "2"]);
+
 let List = {
   props: {
     title: String,

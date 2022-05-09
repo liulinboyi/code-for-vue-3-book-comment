@@ -39,6 +39,14 @@ const arrayInstrumentations = {};
   };
 });
 
+const def = (obj, key, value) => {
+  Object.defineProperty(obj, key, {
+    configurable: true,
+    enumerable: false,
+    value,
+  });
+};
+
 function track(target, key) {
   if (!activeEffect || !shouldTrack) return;
   let depsMap = bucket.get(target);
@@ -148,9 +156,9 @@ let activeEffect;
 const effectStack = [];
 
 function effect(fn, options = {}) {
-  debugger;
+  // debugger;
   const effectFn = () => {
-    debugger;
+    // debugger;
     if (!effectFn.active) {
       return options.scheduler ? undefined : fn();
     }
@@ -205,22 +213,9 @@ function cleanup(effectFn) {
   effectFn.deps.length = 0;
 }
 
-// const instrumentations = {
-//   delete(key) {
-//     const target = this.raw;
-
-//     const res = target.delete(key);
-
-//     console.log(res);
-
-//     trigger(target, key, "DELETE");
-
-//     return res;
-//   },
-// };
-
 const reactiveMap = new Map();
 function reactive(obj) {
+  def(obj, "__v_isReactive", true);
   const proxy = createReactive(obj);
 
   const existionProxy = reactiveMap.get(obj);
@@ -472,14 +467,17 @@ function createReactive(obj, isShallow = false, isReadonly = false) {
 }
 
 function shallowReactive(obj) {
+  def(obj, "__v_isReactive", true);
   return createReactive(obj, true);
 }
 
 function readonly(obj) {
+  def(obj, "__v_isReadonly", true);
   return createReactive(obj, false, true);
 }
 
 function shallowReadonly(obj) {
+  def(obj, "__v_isReadonly", true);
   return createReactive(obj, true, true);
 }
 
@@ -490,9 +488,7 @@ function ref(val) {
     value: val,
   };
 
-  Object.defineProperty(wrapper, "__v_isRef", {
-    value: true,
-  });
+  def(wrapper, "__v_isRef", true);
 
   return reactive(wrapper);
 }
@@ -519,9 +515,7 @@ function toRef(obj, key) {
     },
   };
 
-  Object.defineProperty(wrapper, "__v_isRef", {
-    value: true,
-  });
+  def(wrapper, "__v_isRef", true);
 
   return wrapper;
 }
