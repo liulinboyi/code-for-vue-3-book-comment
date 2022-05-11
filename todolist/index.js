@@ -432,6 +432,7 @@ function createRenderer(options) {
     return result;
   }
 
+  // 核心是，通过对象描述组件，然后执行此方法挂载组件及其children
   /* 挂载组件 */
   function mountComponent(vnode, container, anchor) {
     const isFunctional = typeof vnode.type === "function";
@@ -555,32 +556,39 @@ function createRenderer(options) {
     // created
     created && created.call(renderContext);
 
+    const renderCode = () => {
+      debugger;
+      // 执行组件的render函数，核心是，用对象描述组件，执行对象中的render方法
+      const subTree = renderComponent(render, instance, renderContext);
+      if (!instance.isMounted /* 没有挂载 */) {
+        // 执行beforeMount生命周期 option上的
+        beforeMount && beforeMount.call(renderContext);
+        // 补丁
+        patch(null, subTree, container, anchor);
+        // 将isMounted挂载标识置为true
+        instance.isMounted = true;
+        // 执行mounted生命周期 option上的
+        mounted && mounted.call(renderContext);
+        instance.mounted &&
+          instance.mounted.forEach((hook) => hook.call(renderContext));
+      } /* 已挂载 */ else {
+        beforeUpdate && beforeUpdate.call(renderContext);
+        patch(instance.subTree, subTree, container, anchor);
+        updated && updated.call(renderContext);
+      }
+      instance.subTree = subTree;
+    };
+
     // 在effect中执行render函数
+    // effect 最大的作用就是在这里执行render函数，在这个过程中通过访问reactive对象属性set，
+    // 收集依赖，收集已经reactive之后的对象的依赖
+    // 以后每次这些对象属性更新后，会触发set，进而触发effectFn，当然如果有scheduler
+    // 则使用scheduler执行effectFn
     effect(
-      () => {
-        debugger;
-        // 执行render函数
-        const subTree = renderComponent(render, instance, renderContext);
-        if (!instance.isMounted /* 没有挂载 */) {
-          // 执行beforeMount生命周期 option上的
-          beforeMount && beforeMount.call(renderContext);
-          // 补丁
-          patch(null, subTree, container, anchor);
-          // 将isMounted挂载标识置为true
-          instance.isMounted = true;
-          // 执行mounted生命周期 option上的
-          mounted && mounted.call(renderContext);
-          instance.mounted &&
-            instance.mounted.forEach((hook) => hook.call(renderContext));
-        } /* 已挂载 */ else {
-          beforeUpdate && beforeUpdate.call(renderContext);
-          patch(instance.subTree, subTree, container, anchor);
-          updated && updated.call(renderContext);
-        }
-        instance.subTree = subTree;
-      },
+      // effectFn
+      renderCode,
       {
-        scheduler: queueJob,
+        scheduler: queueJob, // 使用scheduler执行effectFn
       }
     );
   }
