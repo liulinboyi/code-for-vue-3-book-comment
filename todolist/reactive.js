@@ -192,6 +192,7 @@ function effect(fn, options = {}) {
 
     // return res;
   };
+  // effectFn失活标识 false表示失活 true表示活跃
   effectFn.active = true;
   // 将 options 挂在到 effectFn 上
   effectFn.options = options;
@@ -285,18 +286,26 @@ const mutableInstrumentations = {
   // 添加了迭代器
   [Symbol.iterator]: iterationMethod,
   // entries
-  entries: iterationMethod,
+  entries: () => {
+    // 添加method
+    let method = "entries";
+    return iterationMethod(method);
+  },
   // keys
   keys: keysIterationMethod,
   // values
   values: valuesIterationMethod,
 };
 
-function iterationMethod() {
+function iterationMethod(method) {
   // 获取原始数据对象 target
   const target = this.raw;
   // 获取到原始迭代器方法
   const itr = target[Symbol.iterator]();
+  const rawTarget = toRaw(target);
+  const targetIsMap = isMap(rawTarget);
+  const isPair =
+    method === "entries" || (method === Symbol.iterator && targetIsMap);
 
   const wrap = (val) => (typeof val === "object" ? reactive(val) : val);
 
@@ -306,10 +315,16 @@ function iterationMethod() {
   return {
     next() {
       const { value, done } = itr.next();
-      return {
-        value: value ? [wrap(value[0]), wrap(value[1])] : value,
-        done,
-      };
+      return done
+        ? { value, done }
+        : {
+            value: isPair ? [wrap(value[0]), wrap(value[1])] : wrap(value),
+            done,
+          };
+      // return {
+      //   value: value ? [wrap(value[0]), wrap(value[1])] : value,
+      //   done,
+      // };
     },
     [Symbol.iterator]() {
       return this;
@@ -539,13 +554,16 @@ function proxyRefs(target) {
 }
 
 function computed(getter) {
+  debugger;
   let value;
   let dirty = true;
 
   const effectFn /* 副作用函数 */ = effect(getter, {
     lazy: true, // lazy标识
+    computed: true, // conputed标识
     /* getter里面收集依赖的副作用函数 */
     scheduler() {
+      debugger;
       if (!dirty) {
         dirty = true;
         // 执行副作用函数
@@ -556,6 +574,7 @@ function computed(getter) {
 
   const obj = {
     get value() {
+      debugger;
       if (dirty) {
         value = effectFn();
         dirty = false;

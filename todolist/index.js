@@ -41,6 +41,14 @@ function lis(arr) {
   }
   return result;
 }
+let currentRenderingInstance = null;
+
+function setCurrentRenderingInstance(instance) {
+  const prev = currentRenderingInstance;
+  currentRenderingInstance = instance;
+  // currentScopeId = (instance && instance.type.__scopeId) || null;
+  return prev;
+}
 
 function shouldSetAsProps(el, key, value) {
   if (key === "form" && el.tagName === "INPUT") return false;
@@ -108,7 +116,15 @@ function createRenderer(options) {
       }
       setElementText(container, n2.children);
     } else if (Array.isArray(n2.children)) {
-      patchKeyedChildren(n1, n2, container);
+      debugger;
+      if (Array.isArray(n1.children)) {
+        n1.children.forEach((c) => unmount(c));
+        n2.children.forEach((c) => patch(null, c, container));
+      } else {
+        setElementText(container, "");
+        n2.children.forEach((c) => patch(null, c, container));
+      }
+      // patchKeyedChildren(n1, n2, container);
     } else {
       if (Array.isArray(n1.children)) {
         n1.children.forEach((c) => unmount(c));
@@ -249,45 +265,6 @@ function createRenderer(options) {
       }
     }
   }
-  // function patchKeyedChildren(n1, n2, container) {
-  //   const oldChildren = n1.children;
-  //   const newChildren = n2.children;
-
-  //   let oldStartIdx = 0;
-  //   let oldEndIdx = oldChildren.length - 1;
-  //   let newStartIdx = 0;
-  //   let newEndIdx = newChildren.length - 1;
-
-  //   let oldStartVNode = oldChildren[oldStartIdx];
-  //   let oldEndVNode = oldChildren[oldEndIdx];
-  //   let newStartVNode = newChildren[newStartIdx];
-  //   let newEndVNode = newChildren[newEndIdx];
-
-  //   while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
-  //     if (oldStartVNode.key === newStartVNode.key) {
-  //       patch(oldStartVNode, newStartVNode, container);
-  //       oldStartVNode = oldChildren[++oldStartIdx];
-  //       newStartVNode = newChildren[++newStartIdx];
-  //     } else if (oldEndVNode.key === newEndVNode.key) {
-  //       patch(oldEndVNode, newEndVNode, container);
-  //       oldEndVNode = oldChildren[--oldEndIdx];
-  //       newEndVNode = newChildren[--newEndIdx];
-  //     } else if (oldStartVNode.key === newEndVNode.key) {
-  //       patch(oldStartVNode, newEndVNode, container);
-  //       insert(oldStartVNode.el, container, newEndVNode.el.nextSibling);
-
-  //       oldStartVNode = oldChildren[++oldStartIdx];
-  //       newEndVNode = newChildren[--newEndIdx];
-  //     } else if (oldEndVNode.key === newStartVNode.key) {
-  //       // 步骤四：oldEndVNode 和 newStartVNode 比对
-  //       patch(oldEndVNode, newStartVNode, container);
-  //       insert(oldEndVNode.el, container, oldStartVNode.el);
-
-  //       oldEndVNode = oldChildren[--oldEndIdx];
-  //       newStartVNode = newChildren[++newStartIdx];
-  //     }
-  //   }
-  // }
 
   /* 补丁元素 */
   function patchElement(n1, n2) {
@@ -447,6 +424,14 @@ function createRenderer(options) {
     return [props, attrs];
   }
 
+  function renderComponent(render, instance, renderContext) {
+    const prev = setCurrentRenderingInstance(instance);
+    let result = null;
+    result = render.call(renderContext, renderContext);
+    setCurrentRenderingInstance(prev);
+    return result;
+  }
+
   /* 挂载组件 */
   function mountComponent(vnode, container, anchor) {
     const isFunctional = typeof vnode.type === "function";
@@ -575,7 +560,7 @@ function createRenderer(options) {
       () => {
         debugger;
         // 执行render函数
-        const subTree = render.call(renderContext, renderContext);
+        const subTree = renderComponent(render, instance, renderContext);
         if (!instance.isMounted /* 没有挂载 */) {
           // 执行beforeMount生命周期 option上的
           beforeMount && beforeMount.call(renderContext);

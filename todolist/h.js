@@ -5,6 +5,9 @@ function isVNode(value) {
 }
 const isFunction = (val) => typeof val === "function";
 const isString = (val) => typeof val === "string";
+const objectToString = Object.prototype.toString;
+const toTypeString = (value) => objectToString.call(value);
+const isMap = (val) => toTypeString(val) === "[object Map]";
 
 function toRaw(observed) {
   const raw = observed && observed["raw"];
@@ -189,7 +192,7 @@ function createBaseVNode(
   isBlockNode = false,
   needFullChildrenNormalization = false
 ) {
-  debugger;
+  // debugger;
   const vnode = {
     __v_isVNode: true,
     __v_skip: true,
@@ -227,8 +230,8 @@ function createBaseVNode(
     // compiled element vnode - if children is passed, only possible types are
     // string or Array.
     vnode.shapeFlag |= isString(children)
-      ? 8 /* TEXT_CHILDREN */
-      : 16 /* ARRAY_CHILDREN */;
+      ? "TEXT_CHILDREN" /* TEXT_CHILDREN */
+      : "ARRAY_CHILDREN" /* ARRAY_CHILDREN */;
   }
   return vnode;
 }
@@ -252,19 +255,22 @@ function normalizeChildren(vnode, children) {
       }
       return;
     } else {
-      debugger;
+      // debugger;
       type = "SLOTS_CHILDREN" /* SLOTS_CHILDREN */;
       const slotFlag = children._;
-      if (!slotFlag && !(InternalObjectKey in children)) {
+      if (!slotFlag) {
         children._ctx = currentRenderingInstance;
-      } else if (slotFlag === 3 /* FORWARDED */ && currentRenderingInstance) {
+      } else if (
+        slotFlag === "FORWARDED" /* FORWARDED */ &&
+        currentRenderingInstance
+      ) {
         // a child component receives forwarded slots from the parent.
         // its slot type is determined by its parent's slot type.
-        if (currentRenderingInstance.slots._ === 1 /* STABLE */) {
-          children._ = 1 /* STABLE */;
+        if (currentRenderingInstance.slots._ === "STABLE" /* STABLE */) {
+          children._ = "STABLE" /* STABLE */;
         } else {
-          children._ = 2 /* DYNAMIC */;
-          vnode.patchFlag |= 1024 /* DYNAMIC_SLOTS */;
+          children._ = "DYNAMIC" /* DYNAMIC */;
+          // vnode.patchFlag |= 1024 /* DYNAMIC_SLOTS */;
         }
       }
     }
@@ -302,7 +308,7 @@ function createVNode(
   dynamicProps = null,
   isBlockNode = false
 ) {
-  debugger;
+  // debugger;
   if (!type) {
     type = Comment;
   }
@@ -386,7 +392,7 @@ function isReadonly(value) {
 }
 
 function h(type, propsOrChildren, children) {
-  debugger;
+  // debugger;
   const l = arguments.length;
   if (l === 2) {
     if (isObject(propsOrChildren) && !isArray(propsOrChildren)) {

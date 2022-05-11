@@ -1,17 +1,19 @@
-const ListWrapperChildren = function (context) {
-  return h(
-    Fragment,
-    null,
-    context.Lists.value.map((item, index) => ({
-      type: List,
-      props: {
-        title: item.title,
-        index: index,
-        item,
-      },
-      key: item.id,
-    }))
-  );
+const ListWrapperChildren = {
+  props: {
+    Lists: Array,
+  },
+  render() {
+    return h(Fragment, null, [
+      ...this.Lists.value.map((item, index) =>
+        h(List, {
+          title: item.title,
+          index: index,
+          item,
+        })
+      ),
+      h("div", {}, this.$slots.default({ Lists: this.Lists })),
+    ]);
+  },
 };
 
 const List = {
@@ -21,7 +23,7 @@ const List = {
     item: Object,
   },
   render(context) {
-    debugger;
+    // debugger;
     return h("li", { class: "list" }, [
       h(
         "h1",
@@ -69,44 +71,49 @@ const ListWrapper = {
       {
         class: "ul-wrapper",
       },
-      [ListWrapperChildren(context)]
+      [
+        h(
+          ListWrapperChildren,
+          {
+            Lists: this.Lists,
+          },
+          {
+            default: (props) => {
+              debugger;
+              return h("span", "default slote");
+            },
+          }
+        ),
+      ]
     );
-
-    // return {
-    //   type: "ul",
-    //   props: {
-    //     class: "ul-wrapper",
-    //   },
-    //   children: [
-    //     {
-    //       type: Fragment,
-    //       children: context.Lists.value.map((item, index) => ({
-    //         type: List,
-    //         props: {
-    //           title: item.title,
-    //           index: index,
-    //           item,
-    //         },
-    //         key: item.id,
-    //       })),
-    //     },
-    //   ],
-    // };
   },
 };
 
 const Wrapper = {
   setup(props) {
-    debugger;
+    // debugger;
     let Lists = ref([
       { id: 1, title: "eat", checked: false },
       { id: 2, title: "sleep", checked: false },
       { id: 3, title: "drink", checked: false },
     ]);
+    let test = reactive({ haha: [1, 2, 3] });
     watch(Lists.value, (val, oldVal) => {
       debugger;
       console.log("Lists is changed");
       console.log(val, oldVal);
+    });
+
+    let foo = computed(() => {
+      debugger;
+      // 如果直接使用Lists.value，都不会触发effectFn，数据会更新
+      // 使用Lists.value上的具体属性则会触发effectFn
+      return Lists.value.length;
+    });
+
+    let test_a = computed(() => {
+      debugger;
+      return test.haha;
     });
 
     function add() {
@@ -116,10 +123,19 @@ const Wrapper = {
         title: `push-${length}`,
         checked: false,
       });
+      // push 只会收集length和各个索引的依赖，不会收集本身数据的依赖
+      // test.value.haha.push(0);
+
+      // 这样就可以收集本身数据的依赖了
+      debugger
+      test.haha = [...test.haha, 0];
     }
 
     return {
       Lists,
+      foo,
+      test,
+      test_a,
       add,
     };
   },
@@ -136,6 +152,8 @@ const Wrapper = {
         },
         "ADD"
       ),
+      h("div", {}, JSON.stringify(this.foo.value)),
+      h("div", {}, JSON.stringify(this.test_a.value)),
     ]);
   },
 };
