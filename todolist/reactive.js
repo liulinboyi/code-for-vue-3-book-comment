@@ -150,7 +150,7 @@ function resetTracking() {
   shouldTrack = last === undefined ? true : last;
 }
 
-// 用一个全局变量存储当前激活的 effect 函数
+// 用一个全局变量存储当前激活的 effectFn
 let activeEffect;
 // effect 栈
 const effectStack = [];

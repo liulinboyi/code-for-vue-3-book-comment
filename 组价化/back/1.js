@@ -1,6 +1,6 @@
-// const { reactive, ref, effect, shallowReactive, shallowReadonly } =
-//   VueReactivity;
-// const { watch } = Vue;
+const { reactive, ref, effect, shallowReactive, shallowReadonly, shallowRef } =
+  VueReactivity;
+
 function lis(arr) {
   const p = arr.slice();
   const result = [0];
@@ -40,14 +40,6 @@ function lis(arr) {
     v = p[v];
   }
   return result;
-}
-let currentRenderingInstance = null;
-
-function setCurrentRenderingInstance(instance) {
-  const prev = currentRenderingInstance;
-  currentRenderingInstance = instance;
-  // currentScopeId = (instance && instance.type.__scopeId) || null;
-  return prev;
 }
 
 function shouldSetAsProps(el, key, value) {
@@ -116,20 +108,143 @@ function createRenderer(options) {
       }
       setElementText(container, n2.children);
     } else if (Array.isArray(n2.children)) {
-      debugger;
-      if (Array.isArray(n1.children)) {
-        n1.children.forEach((c) => unmount(c));
-        n2.children.forEach((c) => patch(null, c, container));
-      } else {
-        setElementText(container, "");
-        n2.children.forEach((c) => patch(null, c, container));
-      }
-      // patchKeyedChildren(n1, n2, container);
+      patchKeyedChildren(n1, n2, container);
     } else {
       if (Array.isArray(n1.children)) {
         n1.children.forEach((c) => unmount(c));
       } else if (typeof n1.children === "string") {
         setElementText(container, "");
+      }
+    }
+  }
+
+  function patchKeyedChildren(n1, n2, container) {
+    const newChildren = n2.children;
+    const oldChildren = n1.children;
+    // 更新相同的前缀节点
+    // 索引 j 指向新旧两组子节点的开头
+    let j = 0;
+    let oldVNode = oldChildren[j];
+    let newVNode = newChildren[j];
+    // while 循环向后遍历，直到遇到拥有不同 key 值的节点为止
+    while (oldVNode.key === newVNode.key) {
+      // 调用 patch 函数更新
+      patch(oldVNode, newVNode, container);
+      j++;
+      oldVNode = oldChildren[j];
+      newVNode = newChildren[j];
+    }
+
+    // 更新相同的后缀节点
+    // 索引 oldEnd 指向旧的一组子节点的最后一个节点
+    let oldEnd = oldChildren.length - 1;
+    // 索引 newEnd 指向新的一组子节点的最后一个节点
+    let newEnd = newChildren.length - 1;
+
+    oldVNode = oldChildren[oldEnd];
+    newVNode = newChildren[newEnd];
+
+    // while 循环向前遍历，直到遇到拥有不同 key 值的节点为止
+    while (oldVNode.key === newVNode.key) {
+      // 调用 patch 函数更新
+      patch(oldVNode, newVNode, container);
+      oldEnd--;
+      newEnd--;
+      oldVNode = oldChildren[oldEnd];
+      newVNode = newChildren[newEnd];
+    }
+
+    // 满足条件，则说明从 j -> newEnd 之间的节点应作为新节点插入
+    if (j > oldEnd && j <= newEnd) {
+      // 锚点的索引
+      const anchorIndex = newEnd + 1;
+      // 锚点元素
+      const anchor =
+        anchorIndex < newChildren.length ? newChildren[anchorIndex].el : null;
+      // 采用 while 循环，调用 patch 函数逐个挂载新增的节点
+      while (j <= newEnd) {
+        patch(null, newChildren[j++], container, anchor);
+      }
+    } else if (j > newEnd && j <= oldEnd) {
+      // j -> oldEnd 之间的节点应该被卸载
+      while (j <= oldEnd) {
+        unmount(oldChildren[j++]);
+      }
+    } else {
+      // 构造 source 数组
+      const count = newEnd - j + 1; // 新的一组子节点中剩余未处理节点的数量
+      const source = new Array(count);
+      source.fill(-1);
+
+      const oldStart = j;
+      const newStart = j;
+      let moved = false;
+      let pos = 0;
+      const keyIndex = {};
+      for (let i = newStart; i <= newEnd; i++) {
+        keyIndex[newChildren[i].key] = i;
+      }
+      let patched = 0;
+      for (let i = oldStart; i <= oldEnd; i++) {
+        oldVNode = oldChildren[i];
+        if (patched < count) {
+          const k = keyIndex[oldVNode.key];
+          if (typeof k !== "undefined") {
+            newVNode = newChildren[k];
+            patch(oldVNode, newVNode, container);
+            patched++;
+            source[k - newStart] = i;
+            // 判断是否需要移动
+            if (k < pos) {
+              moved = true;
+            } else {
+              pos = k;
+            }
+          } else {
+            // 没找到
+            unmount(oldVNode);
+          }
+        } else {
+          unmount(oldVNode);
+        }
+      }
+
+      if (moved) {
+        const seq = lis(source);
+        // s 指向最长递增子序列的最后一个值
+        let s = seq.length - 1;
+        let i = count - 1;
+        for (i; i >= 0; i--) {
+          if (source[i] === -1) {
+            // 说明索引为 i 的节点是全新的节点，应该将其挂载
+            // 该节点在新 children 中的真实位置索引
+            const pos = i + newStart;
+            const newVNode = newChildren[pos];
+            // 该节点下一个节点的位置索引
+            const nextPos = pos + 1;
+            // 锚点
+            const anchor =
+              nextPos < newChildren.length ? newChildren[nextPos].el : null;
+            // 挂载
+            patch(null, newVNode, container, anchor);
+          } else if (i !== seq[j]) {
+            // 说明该节点需要移动
+            // 该节点在新的一组子节点中的真实位置索引
+            const pos = i + newStart;
+            const newVNode = newChildren[pos];
+            // 该节点下一个节点的位置索引
+            const nextPos = pos + 1;
+            // 锚点
+            const anchor =
+              nextPos < newChildren.length ? newChildren[nextPos].el : null;
+            // 移动
+            insert(newVNode.el, container, anchor);
+          } else {
+            // 当 i === seq[j] 时，说明该位置的节点不需要移动
+            // 并让 s 指向下一个位置
+            s--;
+          }
+        }
       }
     }
   }
@@ -227,7 +342,6 @@ function createRenderer(options) {
 
   /* 补丁组件 */
   function patchComponent(n1, n2, anchor) {
-    // 这时，说明vnod类型一致，那就是这个vnode对象没变，只需要更新props即可
     const instance = (n2.component = n1.component);
     const { props } = instance;
     if (hasPropsChanged(n1.props, n2.props)) {
@@ -293,15 +407,6 @@ function createRenderer(options) {
     return [props, attrs];
   }
 
-  function renderComponent(render, instance, renderContext) {
-    const prev = setCurrentRenderingInstance(instance);
-    let result = null;
-    result = render.call(renderContext, renderContext);
-    setCurrentRenderingInstance(prev);
-    return result;
-  }
-
-  // 核心是，通过对象描述组件，然后执行此方法挂载组件及其children
   /* 挂载组件 */
   function mountComponent(vnode, container, anchor) {
     const isFunctional = typeof vnode.type === "function";
@@ -383,7 +488,7 @@ function createRenderer(options) {
       } else {
         // ？？setupResult还是setupContext
         // 其他情况，将setupContext设置为setupState
-        setupState = setupResult;
+        setupState = setupContext;
       }
     }
 
@@ -395,7 +500,6 @@ function createRenderer(options) {
         const { state, props, slots } = t;
 
         if (k === "$slots") return slots;
-        if (k === "$setup") return setupState;
         if (k === "emit") return emit;
 
         if (state && k in state) {
@@ -425,39 +529,32 @@ function createRenderer(options) {
     // created
     created && created.call(renderContext);
 
-    const renderCode = () => {
-      debugger;
-      // 执行组件的render函数，核心是，用对象描述组件，执行对象中的render方法
-      const subTree = renderComponent(render, instance, renderContext);
-      if (!instance.isMounted /* 没有挂载 */) {
-        // 执行beforeMount生命周期 option上的
-        beforeMount && beforeMount.call(renderContext);
-        // 补丁
-        patch(null, subTree, container, anchor);
-        // 将isMounted挂载标识置为true
-        instance.isMounted = true;
-        // 执行mounted生命周期 option上的
-        mounted && mounted.call(renderContext);
-        instance.mounted &&
-          instance.mounted.forEach((hook) => hook.call(renderContext));
-      } /* 已挂载 */ else {
-        beforeUpdate && beforeUpdate.call(renderContext);
-        patch(instance.subTree, subTree, container, anchor);
-        updated && updated.call(renderContext);
-      }
-      instance.subTree = subTree;
-    };
-
     // 在effect中执行render函数
-    // effect 最大的作用就是在这里执行render函数，在这个过程中通过访问reactive对象属性set，
-    // 收集依赖，收集已经reactive之后的对象的依赖
-    // 以后每次这些对象属性更新后，会触发set，进而触发effectFn，当然如果有scheduler
-    // 则使用scheduler执行effectFn
     effect(
-      // effectFn
-      renderCode,
+      () => {
+        debugger;
+        // 执行render函数
+        const subTree = render.call(renderContext, renderContext);
+        if (!instance.isMounted /* 没有挂载 */) {
+          // 执行beforeMount生命周期 option上的
+          beforeMount && beforeMount.call(renderContext);
+          // 补丁
+          patch(null, subTree, container, anchor);
+          // 将isMounted挂载标识置为true
+          instance.isMounted = true;
+          // 执行mounted生命周期 option上的
+          mounted && mounted.call(renderContext);
+          instance.mounted &&
+            instance.mounted.forEach((hook) => hook.call(renderContext));
+        } /* 已挂载 */ else {
+          beforeUpdate && beforeUpdate.call(renderContext);
+          patch(instance.subTree, subTree, container, anchor);
+          updated && updated.call(renderContext);
+        }
+        instance.subTree = subTree;
+      },
       {
-        scheduler: queueJob, // 使用scheduler执行effectFn
+        scheduler: queueJob,
       }
     );
   }
@@ -465,9 +562,8 @@ function createRenderer(options) {
   function render(vnode, container) {
     debugger;
     if (vnode /* 新vnode */) {
-      // 核心就在path里面
       // 新 vnode 存在，将其与旧 vnode 一起传递给 patch 函数进行打补丁
-      patch(container._vnode /* 旧vnode */, vnode /* 新vode */, container);
+      patch(container._vnode /* 就vnode */, vnode /* 新vode */, container);
     } else {
       if (container._vnode) {
         // 旧 vnode 存在，且新 vnode 不存在，说明是卸载(unmount)操作
@@ -539,3 +635,46 @@ const renderer = createRenderer({
     }
   },
 });
+
+let MyFuncComp = {
+  props: {
+    title: String,
+  },
+  render(context) {
+    debugger;
+    return {
+      type: "h1",
+      props: {
+        onClick: function () {
+          debugger;
+          //   title.value = "A Small Title";
+          context.emit("update", "A Small Title");
+        },
+      },
+      children: context.title,
+    };
+  },
+};
+
+const title = ref("A Big Title");
+
+const Parent = {
+  type: {
+    render(context) {
+      return {
+        type: MyFuncComp,
+        props: {
+          title: title.value,
+          onUpdate(event) {
+            // 自定义事件
+            debugger;
+            console.log(event);
+            title.value = event;
+          },
+        },
+      };
+    },
+  },
+};
+
+renderer.render(Parent, document.querySelector("#app"));
