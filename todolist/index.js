@@ -262,8 +262,10 @@ function createRenderer(options) {
 
   /* 加入并执行队列 */
   function queueJob(job) {
+    debugger
     // 加入队列
     queue.add(job);
+    console.log(queue);
     if (!isFlushing /* 队列没有正在执行 */) {
       isFlushing = true; // 正在执行
       p.then(() => {
@@ -302,6 +304,7 @@ function createRenderer(options) {
   }
 
   // 核心是，通过对象描述组件，然后执行此方法挂载组件及其children
+  // 渲染Effect在mountComponent里面
   /* 挂载组件 */
   function mountComponent(vnode, container, anchor) {
     const isFunctional = typeof vnode.type === "function";

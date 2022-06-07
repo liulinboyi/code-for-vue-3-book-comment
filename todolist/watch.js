@@ -1,3 +1,10 @@
+/**
+ * 把所有值过一遍，并不做处理
+ * 在这个过程中执行了get
+ * @param {*} value
+ * @param {*} seen
+ * @returns
+ */
 function traverse(value, seen = new Set() /*  */) {
   if (typeof value !== "object" || value === null || seen.has(value)) return;
   seen.add(value);

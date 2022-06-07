@@ -198,6 +198,8 @@ function effect(fn, options = {}) {
   effectFn.options = options;
   // activeEffect.deps 用来存储所有与该副作用函数相关的依赖集合
   effectFn.deps = [];
+
+  effectFn.fn = fn;
   // 执行副作用函数
   if (!options.lazy) {
     effectFn();
@@ -553,11 +555,19 @@ function proxyRefs(target) {
   });
 }
 
+/**
+ * 用get得到value属性的值
+ * @param {*} getter
+ * @returns
+ */
 function computed(getter) {
   debugger;
   let value;
   let dirty = true;
 
+  // getter里面触发set就会执行scheduler
+  // 只有computed回调里面收集的依赖被set才会触发scheduler才会把dirty置为true
+  // 然后在render获取值时执行get才会获取新值
   const effectFn /* 副作用函数 */ = effect(getter, {
     lazy: true, // lazy标识
     computed: true, // conputed标识
@@ -575,8 +585,12 @@ function computed(getter) {
   const obj = {
     get value() {
       debugger;
+      // 第一次触发set，dirty为true会执行effectFn取值
       if (dirty) {
         value = effectFn();
+        // 第一次执行会把dirty置为false
+
+        // 再次取值触发get时dirty才会为false
         dirty = false;
       }
       // 收集依赖
