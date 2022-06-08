@@ -127,7 +127,7 @@ const Wrapper = {
       // test.value.haha.push(0);
 
       // 这样就可以收集本身数据的依赖了
-      debugger
+      debugger;
       test.haha = [...test.haha, 0];
     }
 
@@ -159,4 +159,6 @@ const Wrapper = {
 };
 const App = h(Wrapper);
 
-renderer.render(App, document.querySelector("#app"));
+// renderer.render(App, document.querySelector("#app"));
+const app = createApp(App);
+app.mount(document.querySelector("#app"));

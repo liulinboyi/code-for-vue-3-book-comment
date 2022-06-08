@@ -16,10 +16,13 @@ function traverse(value, seen = new Set() /*  */) {
 }
 
 function watch(source, cb, options = {}) {
+  // 对source做处理
   let getter;
   if (typeof source === "function") {
+    // 是函数，直接赋值
     getter = source;
   } else {
+    // 不是函数，则在getter里面把所有属性过一遍，来收集依赖
     getter = () => traverse(source);
   }
 
@@ -43,8 +46,9 @@ function watch(source, cb, options = {}) {
     // 执行 getter
     () => getter(),
     {
-      lazy: true,
+      lazy: true, // 不执行effectFn，只把effectFn返回
       scheduler: () => {
+        debugger;
         if (options.flush === "post") {
           const p = Promise.resolve();
           p.then(job);
@@ -56,8 +60,11 @@ function watch(source, cb, options = {}) {
   );
 
   if (options.immediate) {
+    // 如果有immediate参数，则立即执行job
+    // 此时直接执行job，newValue会在里面计算，oldValue则是undefiend
     job();
   } else {
+    // 否则，执行effectFn计算出getter的结果
     oldValue = effectFn();
   }
 }

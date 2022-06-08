@@ -262,7 +262,7 @@ function createRenderer(options) {
 
   /* 加入并执行队列 */
   function queueJob(job) {
-    debugger
+    debugger;
     // 加入队列
     queue.add(job);
     console.log(queue);
@@ -338,6 +338,7 @@ function createRenderer(options) {
     const [props, attrs] = resolveProps(propsOption, vnode.props);
 
     // vnode.children作为插槽
+    // 在使用组件过程中，里面的children就是插槽
     const slots = vnode.children || {};
 
     const instance = {
@@ -483,62 +484,87 @@ function createRenderer(options) {
 
   return {
     render,
+    createApp: createAppApi(render),
   };
 }
 
-const renderer = createRenderer({
-  createElement(tag) {
-    return document.createElement(tag);
-  },
-  setElementText(el, text) {
-    el.textContent = text;
-  },
-  insert(el, parent, anchor = null) {
-    parent.insertBefore(el, anchor);
-  },
-  createText(text) {
-    return document.createTextNode(text);
-  },
-  setText(el, text) {
-    el.nodeValue = text;
-  },
-  patchProps(el, key, prevValue, nextValue) {
-    if (/^on/.test(key)) {
-      const invokers = el._vei || (el._vei = {});
-      let invoker = invokers[key];
-      const name = key.slice(2).toLowerCase();
-      if (nextValue) {
-        if (!invoker) {
-          invoker = el._vei[key] = (e) => {
-            console.log(e.timeStamp);
-            console.log(invoker.attached);
-            if (e.timeStamp < invoker.attached) return;
-            if (Array.isArray(invoker.value)) {
-              invoker.value.forEach((fn) => fn(e));
-            } else {
-              invoker.value(e);
-            }
-          };
-          invoker.value = nextValue;
-          invoker.attached = performance.now();
-          el.addEventListener(name, invoker);
-        } else {
-          invoker.value = nextValue;
+function createApp(...args) {
+  const app = ensureRenderer().createApp(...args);
+  const { mount } = app;
+  app.mount = (containerOrSelector) => {
+    mount(containerOrSelector);
+  };
+  return app;
+}
+
+function createAppApi(render) {
+  return function createApp(rootComponent) {
+    const app = {
+      // 其他Api
+      mount(el) {
+        render(rootComponent, el);
+      },
+    };
+    return app;
+  };
+}
+
+function ensureRenderer() {
+  const renderer = createRenderer({
+    createElement(tag) {
+      return document.createElement(tag);
+    },
+    setElementText(el, text) {
+      el.textContent = text;
+    },
+    insert(el, parent, anchor = null) {
+      parent.insertBefore(el, anchor);
+    },
+    createText(text) {
+      return document.createTextNode(text);
+    },
+    setText(el, text) {
+      el.nodeValue = text;
+    },
+    patchProps(el, key, prevValue, nextValue) {
+      if (/^on/.test(key)) {
+        const invokers = el._vei || (el._vei = {});
+        let invoker = invokers[key];
+        const name = key.slice(2).toLowerCase();
+        if (nextValue) {
+          if (!invoker) {
+            invoker = el._vei[key] = (e) => {
+              console.log(e.timeStamp);
+              console.log(invoker.attached);
+              if (e.timeStamp < invoker.attached) return;
+              if (Array.isArray(invoker.value)) {
+                invoker.value.forEach((fn) => fn(e));
+              } else {
+                invoker.value(e);
+              }
+            };
+            invoker.value = nextValue;
+            invoker.attached = performance.now();
+            el.addEventListener(name, invoker);
+          } else {
+            invoker.value = nextValue;
+          }
+        } else if (invoker) {
+          el.removeEventListener(name, invoker);
         }
-      } else if (invoker) {
-        el.removeEventListener(name, invoker);
-      }
-    } else if (key === "class") {
-      el.className = nextValue || "";
-    } else if (shouldSetAsProps(el, key, nextValue)) {
-      const type = typeof el[key];
-      if (type === "boolean" && nextValue === "") {
-        el[key] = true;
+      } else if (key === "class") {
+        el.className = nextValue || "";
+      } else if (shouldSetAsProps(el, key, nextValue)) {
+        const type = typeof el[key];
+        if (type === "boolean" && nextValue === "") {
+          el[key] = true;
+        } else {
+          el[key] = nextValue;
+        }
       } else {
-        el[key] = nextValue;
+        el.setAttribute(key, nextValue);
       }
-    } else {
-      el.setAttribute(key, nextValue);
-    }
-  },
-});
+    },
+  });
+  return renderer;
+}
